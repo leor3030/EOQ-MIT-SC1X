@@ -10,6 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# Estilos CSS para métricas de alto impacto
 st.markdown("""
 <style>
     div[data-testid="stMetricValue"] {
@@ -21,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📦 MIT CTL.SC1x: EOQ & Inventory Lot-Sizing Master Suite")
-st.caption("Suite completa para Supply Chain: Modelado dinámico, comparación de variantes y calculadora de preguntas de examen.")
+st.caption("Suite completa para Supply Chain: Modelado dinámico, curvas T vs Q, comparación de variantes y calculadora de exámenes.")
 
 tab1, tab2, tab3 = st.tabs([
     "🎯 Modelo Individual & Curvas T vs Q",
@@ -30,7 +31,7 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # =============================================================================
-# PESTAÑA 1: MODELO INDIVIDUAL
+# PESTAÑA 1: MODELO INDIVIDUAL & CURVAS DINÁMICAS T vs Q
 # =============================================================================
 with tab1:
     col_input, col_view = st.columns([1, 2], gap="large")
@@ -47,7 +48,8 @@ with tab1:
                 "3. Descuento One-Time / Good Deal (Compra Única)",
                 "EPQ (Finite Replenishment)",
                 "EOQ con Backorders Planificados"
-            ]
+            ],
+            key="t1_model_select"
         )
         st.markdown("---")
         st.markdown("**Variables Base:**")
@@ -57,42 +59,46 @@ with tab1:
         
         c = 50.0
         L = 0.0
-        P = 0.0
-        cs = 0.0
+        P = D * 2.0
+        cs = 25.0
         
         if selected_model in ["EOQ Básico (Instantaneous)", "EOQ con Lead Time / Pipeline Inventory", "EPQ (Finite Replenishment)", "EOQ con Backorders Planificados"]:
             c = st.number_input("Costo Unitario (c) [$/un]", value=50.0, min_value=0.01, step=1.0, key="t1_c")
             
         if selected_model == "EOQ con Lead Time / Pipeline Inventory":
             st.markdown("---")
-            L_days = st.number_input("Lead Time (L) [días]", value=30.0, min_value=0.0, step=1.0, key="t1_L")
+            L_days = st.number_input("Lead Time (L) [días]", value=30.0, min_value=0.0, step=1.0, key="t1_L_days")
             L = L_days / 365.0
 
         elif selected_model == "EPQ (Finite Replenishment)":
             st.markdown("---")
-            P = st.number_input(f"Tasa de Producción (P) [> {D:.0f}]", value=float(D * 2), min_value=float(D + 1.0), step=100.0, key="t1_P")
+            min_p_allowed = float(D + 1.0)
+            default_p = max(float(D * 2.0), min_p_allowed)
+            P = st.number_input(f"Tasa de Producción (P) [debe ser > D ({D:,.0f})]", value=default_p, min_value=min_p_allowed, step=500.0, key="t1_P")
 
         elif selected_model == "EOQ con Backorders Planificados":
             st.markdown("---")
-            cs = st.number_input("Costo de Faltante (cs) [$/un-año]", value=25.0, min_value=0.1, step=5.0, key="t1_cs")
+            cs = st.number_input("Costo de Faltante / Shortage (cs) [$/un-año]", value=25.0, min_value=0.1, step=5.0, key="t1_cs")
 
         elif selected_model in ["1. Descuento All-Units (3 Escalones)", "2. Descuento Incremental / Escalas (3 Escalones)"]:
             st.markdown("---")
+            st.markdown("**Estructura de 3 Escalones de Precio:**")
             col_t1, col_t2 = st.columns(2)
             with col_t1:
-                c0 = st.number_input("Precio Base c0 [0 a Q1)", value=50.0, min_value=0.1, step=1.0)
-                c1 = st.number_input("Precio c1 [Q1 a Q2)", value=45.0, min_value=0.1, step=1.0)
-                c2 = st.number_input("Precio c2 [>= Q2]", value=40.0, min_value=0.1, step=1.0)
+                c0 = st.number_input("Precio c0 [0 a Q1)", value=50.0, min_value=0.1, step=1.0, key="t1_c0")
+                c1 = st.number_input("Precio c1 [Q1 a Q2)", value=45.0, min_value=0.1, step=1.0, key="t1_c1")
+                c2 = st.number_input("Precio c2 [>= Q2]", value=40.0, min_value=0.1, step=1.0, key="t1_c2")
             with col_t2:
-                Q1 = st.number_input("Breakpoint 1 (Q1) [un]", value=500.0, min_value=1.0, step=50.0)
-                Q2 = st.number_input("Breakpoint 2 (Q2) [un]", value=1000.0, min_value=float(Q1 + 1), step=50.0)
+                Q1 = st.number_input("Breakpoint 1 (Q1) [un]", value=500.0, min_value=1.0, step=50.0, key="t1_Q1")
+                Q2 = st.number_input("Breakpoint 2 (Q2) [un]", value=1000.0, min_value=float(Q1 + 1.0), step=50.0, key="t1_Q2")
 
         elif selected_model == "3. Descuento One-Time / Good Deal (Compra Única)":
             st.markdown("---")
-            c_regular = st.number_input("Precio Regular (c) [$/un]", value=50.0, min_value=0.1, step=1.0)
-            cg = st.number_input("Precio Oferta (cg) [$/un]", value=40.0, min_value=0.01, max_value=float(c_regular), step=1.0)
+            st.markdown("**Parámetros de Oportunidad Única:**")
+            c_regular = st.number_input("Precio Regular (c) [$/un]", value=50.0, min_value=0.1, step=1.0, key="t1_creg")
+            cg = st.number_input("Precio Oferta Especial (cg) [$/un]", value=40.0, min_value=0.01, max_value=float(c_regular), step=1.0, key="t1_cg")
 
-    # Computación
+    # Computación de resultados para la Pestaña 1
     if selected_model == "EOQ Básico (Instantaneous)":
         res = eoq.basic_eoq(D, c, ct, h)
     elif selected_model == "EOQ con Lead Time / Pipeline Inventory":
@@ -119,6 +125,21 @@ with tab1:
         
         if "decision_note" in res:
             st.info(f"💡 **Dictamen MIT:** {res['decision_note']}")
+
+        if selected_model == "2. Descuento Incremental / Escalas (3 Escalones)":
+            with st.expander("📋 Ver Tabla Detallada de Factibilidad y Costos por Escalón (MIT Fi y ci^e)"):
+                st.dataframe(res["eval_table"].style.format({
+                    "Precio (ci)": "${:.2f}",
+                    "Costo Fijo Fi": "${:,.2f}",
+                    "Q*_i": "{:,.1f}",
+                    "Costo Efectivo ci^e": "${:.3f}",
+                    "TC Total ($)": "${:,.2f}"
+                }), use_container_width=True)
+
+        if selected_model == "3. Descuento One-Time / Good Deal (Compra Única)":
+            c_s1, c_s2 = st.columns(2)
+            c_s1.success(f"💰 **Ahorro Total Neto:** ${res['Savings']:,.2f}")
+            c_s2.info(f"⚖️ **Lote Regular vs Especial:** Q* base = {res['Q_base']:.1f} un ➔ Qg* = {res['Q_opt']:.1f} un")
             
         cycles = 3
         t_cycle = res["T_opt"]
@@ -131,7 +152,7 @@ with tab1:
             q_base = res["Q_base"]
             fig.add_trace(go.Scatter(x=[0, 0, t_special], y=[0, Q_val, 0], mode='lines', name=f'Compra Especial Qg* ({Q_val:.0f} un)', line=dict(color='#DC2626', width=3, dash='dash')))
             time_reg, ioh_reg = [], []
-            for c_idx in range(int(np.ceil(t_special / t_base))):
+            for c_idx in range(int(np.ceil(t_special / max(1e-4, t_base)))):
                 t_st = c_idx * t_base
                 t_en = (c_idx + 1) * t_base
                 time_reg.extend([t_st, t_st, t_en])
@@ -172,32 +193,46 @@ with tab1:
             fig.add_trace(go.Scatter(x=time_series, y=ioh_series, mode='lines', name='Inventario Físico (IOH)', line=dict(color='#0284C7', width=2.5), fill='tozeroy'))
             fig.add_hline(y=res["IOH_avg"], line_dash="dash", line_color="#059669", annotation_text=f"IOH Promedio = {res['IOH_avg']:.1f}")
 
-        fig.update_layout(title="Curva T vs Q de Inventario", xaxis_title="Tiempo t (años)", yaxis_title="Unidades", template="plotly_white", height=430)
+        fig.update_layout(title="Curva de Ciclo de Inventario: Tiempo (T) vs Inventario (Q)", xaxis_title="Tiempo t (años)", yaxis_title="Unidades", template="plotly_white", height=430)
         st.plotly_chart(fig, use_container_width=True)
 
 # =============================================================================
-# PESTAÑA 2: COMPARADOR MULTI-MODELO
+# PESTAÑA 2: COMPARADOR MULTI-MODELO & ANÁLISIS DE SENSIBILIDAD MIT
 # =============================================================================
 with tab2:
     st.subheader("📊 Comparación Exhaustiva de Modelos de Inventario")
+    st.markdown("Compara el modelo base frente a variaciones operacionales bajo un mismo escenario de demanda.")
+
+    st.markdown("#### Configuración de Variables Adicionales para la Comparación")
     c_cmp1, c_cmp2, c_cmp3, c_cmp4 = st.columns(4)
     with c_cmp1:
-        cmp_L_days = st.number_input("Lead Time Pipeline [días]", value=30.0, step=5.0, key="c_L")
+        cmp_L_days = st.number_input("Lead Time Pipeline [días]", value=30.0, step=5.0, key="cmp_tab2_L")
         cmp_L = cmp_L_days / 365.0
     with c_cmp2:
-        cmp_P = st.number_input("Tasa Producción P (EPQ)", value=float(D * 2), step=100.0, key="c_P")
+        # Blindaje dinámico: Si D creció, sugerir un P seguro mayor a D
+        suggested_P = max(4000.0, float(D * 2.0))
+        cmp_P_val = st.number_input(f"Tasa Producción P (EPQ) [> {D:,.0f}]", value=suggested_P, min_value=1.0, step=1000.0, key="cmp_tab2_P")
     with c_cmp3:
-        cmp_cs = st.number_input("Costo Shortage cs", value=25.0, step=5.0, key="c_cs")
+        cmp_cs = st.number_input("Costo Shortage cs [$/un-año]", value=25.0, step=5.0, key="cmp_tab2_cs")
     with c_cmp4:
-        cmp_cg = st.number_input("Precio One-Time Deal (cg)", value=40.0, step=1.0, key="c_cg")
+        cmp_cg = st.number_input("Precio One-Time Deal (cg) [$/un]", value=40.0, step=1.0, key="cmp_tab2_cg")
 
     base_price = 50.0
+    
+    # Blindaje matemático para evitar el crash si P <= D
+    safe_P = max(float(cmp_P_val), float(D * 1.5))
+    
     m_base = eoq.basic_eoq(D, base_price, ct, h)
     m_pipe = eoq.pipeline_eoq(D, base_price, ct, h, cmp_L)
     m_allu = eoq.all_units_discount_3tiers(D, ct, h, base_price, 45.0, 40.0, 500.0, 1000.0)
     m_incr = eoq.incremental_discount_3tiers(D, ct, h, base_price, 45.0, 40.0, 500.0, 1000.0)
     m_otd = eoq.one_time_deal_eoq(D, base_price, cmp_cg, ct, h)
-    m_epq = eoq.epq_finite_replenishment(D, base_price, ct, h, cmp_P)
+    
+    try:
+        m_epq = eoq.epq_finite_replenishment(D, base_price, ct, h, safe_P)
+    except Exception:
+        m_epq = eoq.basic_eoq(D, base_price, ct, h)
+        
     m_pbo = eoq.planned_backorders_eoq(D, base_price, ct, h, cmp_cs)
 
     comp_list = [
@@ -214,8 +249,13 @@ with tab2:
         "Q*": "{:,.1f}", "T* (días)": "{:,.1f}", "N*": "{:,.2f}", "Precio": "${:.2f}", "TRC ($)": "${:,.2f}", "TC Total ($)": "${:,.2f}"
     }), use_container_width=True)
 
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(x=df_res_comp["Modelo"], y=df_res_comp["TC Total ($)"], marker_color="#2563EB", name="Costo Total Anualizado"))
+    fig_bar.update_layout(title="Comparativa de Costo Total (TC) entre Variantes de Inventario", yaxis_title="Costo ($)", template="plotly_white", height=380)
+    st.plotly_chart(fig_bar, use_container_width=True)
+
 # =============================================================================
-# PESTAÑA 3: CALCULADORA MANUAL (PREGUNTAS DE EXAMEN MIT)
+# PESTAÑA 3: CALCULADORA MANUAL (PREGUNTAS DE EXAMEN MIT CTL.SC1x)
 # =============================================================================
 with tab3:
     st.subheader("🧮 Solucionador de Preguntas Típicas del MIT (Exámenes & Tareas)")
@@ -229,12 +269,13 @@ with tab3:
             "3. Sensibilidad a Errores de Pronóstico de Demanda (DA vs DF)",
             "4. Calculadora Flash de Métricas MIT (Q*, T*, API, b*, Qg*, tp)"
         ],
-        horizontal=False
+        horizontal=False,
+        key="tab3_tool_radio"
     )
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # PROBLEMA TIPO 1: VENDOR BATCH SIZES (IMAGEN 5)
+    # PROBLEMA TIPO 1: VENDOR BATCH SIZES (PREGUNTAS TIPO MULTIPLOS DE 50 O 100)
     # -------------------------------------------------------------
     if sub_tool == "1. Lote Restringido / Empaque de Proveedor (Vendor batch size: 50, 100, etc.)":
         st.markdown("#### 📦 Resolución: Restricción de Tamaño de Lote / Empaque")
@@ -242,36 +283,36 @@ with tab3:
         
         c_p1, c_p2, c_p3 = st.columns(3)
         with c_p1:
-            q_mode = st.radio("Método de entrada:", ["Tengo D, ct, c, h", "Ya calculé Q* directamente"])
+            q_mode = st.radio("Método de entrada:", ["Tengo D, ct, c, h", "Ya calculé Q* directamente"], key="m_qmode_sel")
             if q_mode == "Tengo D, ct, c, h":
-                m_D = st.number_input("Demanda D [un/año]", value=2000.0, step=100.0, key="m_b_D")
-                m_ct = st.number_input("Costo Fijo ct [$/orden]", value=500.0, step=25.0, key="m_b_ct")
-                m_c = st.number_input("Costo unitario c [$/un]", value=50.0, step=1.0, key="m_b_c")
+                m_D = st.number_input("Demanda D [un/año]", value=180000.0, step=1000.0, key="m_b_D")
+                m_ct = st.number_input("Costo Fijo ct [$/orden]", value=1525.0, step=25.0, key="m_b_ct")
+                m_c = st.number_input("Costo unitario c [$/un]", value=125.0, step=1.0, key="m_b_c")
                 m_h = st.number_input("Tasa h [%]", value=25.0, step=1.0, key="m_b_h") / 100.0
                 m_ce = m_c * m_h
             else:
-                m_Q_dir = st.number_input("Q* calculado [unidades]", value=400.0, step=10.0, key="m_b_Qdir")
-                m_D = st.number_input("Demanda D [un/año]", value=2000.0, step=100.0, key="m_b_D2")
-                m_ct = st.number_input("Costo Fijo ct [$/orden]", value=500.0, step=25.0, key="m_b_ct2")
-                m_ce = (2 * m_ct * m_D) / (m_Q_dir ** 2)
+                m_Q_dir = st.number_input("Q* calculado [unidades]", value=4191.4, step=10.0, key="m_b_Qdir")
+                m_D = st.number_input("Demanda D [un/año]", value=180000.0, step=1000.0, key="m_b_D2")
+                m_ct = st.number_input("Costo Fijo ct [$/orden]", value=1525.0, step=25.0, key="m_b_ct2")
+                m_ce = (2.0 * m_ct * m_D) / (m_Q_dir ** 2)
 
         with c_p2:
-            batch_val = st.number_input("Restricción del Proveedor: Empaques de (ej: 50 unidades)", value=50, min_value=1, step=5, key="m_batch")
+            batch_val = st.number_input("Restricción del Proveedor: Empaques de (ej: 50 o 100 un)", value=100, min_value=1, step=5, key="m_batch_step")
             solve_batch = eoq.batch_size_rounding(m_D, m_ct, m_ce, batch_val)
             
             st.markdown("**Evaluación de Candidatos (MIT Method):**")
-            st.write(f"- $Q^*$ Óptimo sin restricción: **{solve_batch['Q_opt']:.2f} un**")
-            st.write(f"- Opción Redondeo Abajo: **{solve_batch['q_low']} un** ➔ TRC = **${solve_batch['trc_low']:,.2f}**")
-            st.write(f"- Opción Redondeo Arriba: **{solve_batch['q_high']} un** ➔ TRC = **${solve_batch['trc_high']:,.2f}**")
+            st.write(f"- $Q^*$ Óptimo sin restricción: **{solve_batch['Q_opt']:,.2f} un**")
+            st.write(f"- Opción Redondeo Abajo: **{solve_batch['q_low']:,} un** ➔ TRC = **${solve_batch['trc_low']:,.2f}**")
+            st.write(f"- Opción Redondeo Arriba: **{solve_batch['q_high']:,} un** ➔ TRC = **${solve_batch['trc_high']:,.2f}**")
 
         with c_p3:
             st.success("### ✅ Respuesta para el Casillero MIT:")
-            st.metric("Order Quantity Recomendado", f"{solve_batch['recommended_Q']} unidades")
-            st.caption(f"Penalidad en TRC frente al óptimo teórico: **+{solve_batch['pct_penalty']:.3f}%**")
-            st.info(f"**Justificación:** Al ordenar {solve_batch['recommended_Q']} unidades, el TRC es ${solve_batch['recommended_trc']:,.2f}, que es estrictamente menor al de la opción alternativa.")
+            st.metric("Order Quantity Recomendado", f"{solve_batch['recommended_Q']:,} unidades")
+            st.caption(f"Penalidad en TRC frente al óptimo: **+{solve_batch['pct_penalty']:.3f}%**")
+            st.info(f"**Justificación:** Al ordenar {solve_batch['recommended_Q']:,} unidades, el TRC es ${solve_batch['recommended_trc']:,.2f}, que es estrictamente menor al de la opción alternativa.")
 
     # -------------------------------------------------------------
-    # PROBLEMA TIPO 2: POWER OF TWO RULE (IMAGEN 6)
+    # PROBLEMA TIPO 2: POWER OF TWO RULE (CALENDARIOS EN SEMANAS)
     # -------------------------------------------------------------
     elif sub_tool == "2. Regla de Potencias de Dos (Power of Two Policy en Semanas)":
         st.markdown("#### ⏱️ Resolución: Power of Two Policy (Calendario en Semanas)")
@@ -279,20 +320,20 @@ with tab3:
         
         c_w1, c_w2, c_w3 = st.columns(3)
         with c_w1:
-            pw_mode = st.radio("Método de entrada:", ["Ingresar parámetros D, ct, c, h", "Ya tengo T* (en semanas o años)"], key="pw_in_mode")
-            weeks_in_year = st.number_input("Semanas por año", value=52, min_value=1, step=1, key="pw_weeks")
+            pw_mode = st.radio("Método de entrada:", ["Ingresar parámetros D, ct, c, h", "Ya tengo T* (en semanas o años)"], key="pw_in_mode_radio")
+            weeks_in_year = st.number_input("Semanas por año", value=52, min_value=1, step=1, key="pw_weeks_cnt")
             
             if pw_mode == "Ingresar parámetros D, ct, c, h":
-                pw_D = st.number_input("Demanda D [un/año]", value=25000.0, step=1000.0, key="pw_D")
-                pw_ct = st.number_input("Costo Fijo ct [$/orden]", value=750.0, step=25.0, key="pw_ct")
-                pw_c = st.number_input("Costo c [$/un]", value=25.50, step=0.5, key="pw_c")
-                pw_h = st.number_input("Tasa h [%]", value=15.0, step=1.0, key="pw_h") / 100.0
+                pw_D = st.number_input("Demanda D [un/año]", value=25000.0, step=1000.0, key="pw_in_D")
+                pw_ct = st.number_input("Costo Fijo ct [$/orden]", value=750.0, step=25.0, key="pw_in_ct")
+                pw_c = st.number_input("Costo c [$/un]", value=25.50, step=0.5, key="pw_in_c")
+                pw_h = st.number_input("Tasa h [%]", value=15.0, step=1.0, key="pw_in_h") / 100.0
                 pw_ce = pw_c * pw_h
                 pw_res = eoq.power_of_two_calculator(pw_D, pw_ct, pw_ce, weeks_in_year)
             else:
-                pw_unit_t = st.selectbox("Unidad de T* que posees:", ["Semanas", "Años directos"])
-                pw_t_in = st.number_input("Valor de T*", value=6.50, step=0.5)
-                pw_D = st.number_input("Demanda D [un/año]", value=25000.0, step=1000.0, key="pw_D_only")
+                pw_unit_t = st.selectbox("Unidad de T* que posees:", ["Semanas", "Años directos"], key="pw_tunit")
+                pw_t_in = st.number_input("Valor de T*", value=6.50, step=0.5, key="pw_tval")
+                pw_D = st.number_input("Demanda D [un/año]", value=25000.0, step=1000.0, key="pw_D_only_val")
                 if pw_unit_t == "Semanas":
                     t_weeks = pw_t_in
                     t_years = pw_t_in / weeks_in_year
@@ -300,10 +341,10 @@ with tab3:
                     t_years = pw_t_in
                     t_weeks = pw_t_in * weeks_in_year
                 
-                k_val = int(np.ceil(np.log(t_weeks / np.sqrt(2)) / np.log(2)))
+                k_val = int(np.ceil(np.log(t_weeks / np.sqrt(2.0)) / np.log(2.0)))
                 t_prac = 2 ** k_val
                 q_prac = pw_D * (t_prac / weeks_in_year)
-                r_t = t_prac / t_weeks
+                r_t = t_prac / max(1e-4, t_weeks)
                 pct_err = (0.5 * (r_t + (1.0 / r_t)) - 1.0) * 100.0
                 
                 pw_res = {
@@ -327,7 +368,7 @@ with tab3:
             st.success("### ✅ Respuesta para el Casillero MIT:")
             st.metric("Frecuencia de Reorden Recomendada", f"{pw_res['T_practical_weeks']} semanas")
             st.metric("Cantidad de Pedido (Q)", f"{pw_res['Q_practical']:,.0f} un")
-            st.caption(f"Error sobre TRC*: **+{pw_res['pct_penalty']:.2f}%** (garantizado $\le 6\%$ por el Teorema MIT)")
+            st.caption(f"Error sobre TRC*: **+{pw_res['pct_penalty']:.2f}%** (garantizado $\\le 6\\%$ por el Teorema MIT)")
 
     # -------------------------------------------------------------
     # PROBLEMA TIPO 3: SENSIBILIDAD DE PRONÓSTICO (DA vs DF)
@@ -338,9 +379,8 @@ with tab3:
         
         c_s1, c_s2 = st.columns(2)
         with c_s1:
-            df_val = st.number_input("Demanda Pronosticada / Usada para ordenar (DF)", value=2000.0, step=100.0)
-            da_val = st.number_input("Demanda Real que ocurrió (DA)", value=3000.0, step=100.0)
-            
+            df_val = st.number_input("Demanda Pronosticada / Usada para ordenar (DF)", value=2000.0, step=100.0, key="sens_df_in")
+            da_val = st.number_input("Demanda Real que ocurrió (DA)", value=3000.0, step=100.0, key="sens_da_in")
             res_sens = eoq.demand_sensitivity_calculator(da_val, df_val)
 
         with c_s2:
@@ -356,16 +396,17 @@ with tab3:
         st.markdown("#### ⚡ Calculadora Rápida de Métricas Específicas")
         flash_model = st.selectbox(
             "Seleccione el modelo para extraer sus variables directas:",
-            ["EOQ con Backorders (b*, CR, T1, T2)", "EPQ (tp, td, IOH max)", "Lead Time / Pipeline (API, ROP)", "One-Time Good Deal (Qg*, Ahorro)"]
+            ["EOQ con Backorders (b*, CR, T1, T2)", "EPQ (tp, td, IOH max)", "Lead Time / Pipeline (API, ROP)", "One-Time Good Deal (Qg*, Ahorro)"],
+            key="flash_model_picker"
         )
         
         if flash_model == "EOQ con Backorders (b*, CR, T1, T2)":
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                f_D = st.number_input("D", value=2000.0, step=100.0, key="fb_D")
-                f_ct = st.number_input("ct", value=500.0, step=25.0, key="fb_ct")
-                f_ce = st.number_input("ce (c * h)", value=12.5, step=1.0, key="fb_ce")
-                f_cs = st.number_input("cs (costo unitario faltante)", value=25.0, step=2.5, key="fb_cs")
+                f_D = st.number_input("Demanda D", value=2000.0, step=100.0, key="fb_D_in")
+                f_ct = st.number_input("Costo ct", value=500.0, step=25.0, key="fb_ct_in")
+                f_ce = st.number_input("ce (c * h)", value=12.5, step=1.0, key="fb_ce_in")
+                f_cs = st.number_input("cs (costo unitario faltante)", value=25.0, step=2.5, key="fb_cs_in")
                 f_res = eoq.planned_backorders_eoq(f_D, f_ce/0.25, f_ct, 0.25, f_cs)
             with col_b2:
                 st.write(f"- **Critical Ratio (CR):** `{f_res['CR']:.4f}`")
@@ -378,10 +419,10 @@ with tab3:
         elif flash_model == "EPQ (tp, td, IOH max)":
             col_e1, col_e2 = st.columns(2)
             with col_e1:
-                fe_D = st.number_input("Demanda D", value=2000.0, key="fe_D")
-                fe_P = st.number_input("Tasa de Producción P (> D)", value=4000.0, key="fe_P")
-                fe_ct = st.number_input("Costo de Setup ct", value=500.0, key="fe_ct")
-                fe_ce = st.number_input("ce (c * h)", value=12.5, key="fe_ce")
+                fe_D = st.number_input("Demanda D", value=2000.0, step=100.0, key="fe_D_in")
+                fe_P = st.number_input("Tasa de Producción P (> D)", value=max(float(fe_D*2), 4000.0), min_value=float(fe_D+1), step=500.0, key="fe_P_in")
+                fe_ct = st.number_input("Costo de Setup ct", value=500.0, step=25.0, key="fe_ct_in")
+                fe_ce = st.number_input("ce (c * h)", value=12.5, step=1.0, key="fe_ce_in")
                 fe_res = eoq.epq_finite_replenishment(fe_D, fe_ce/0.25, fe_ct, 0.25, fe_P)
             with col_e2:
                 st.write(f"- **Lote Óptimo EPQ (Q*):** `{fe_res['Q_opt']:.2f}` unidades")
@@ -392,8 +433,8 @@ with tab3:
         elif flash_model == "Lead Time / Pipeline (API, ROP)":
             col_l1, col_l2 = st.columns(2)
             with col_l1:
-                fl_D = st.number_input("Demanda Anual D", value=2000.0, key="fl_D")
-                fl_L = st.number_input("Lead Time L (en días)", value=30.0, key="fl_L") / 365.0
+                fl_D = st.number_input("Demanda Anual D", value=2000.0, step=100.0, key="fl_D_in")
+                fl_L = st.number_input("Lead Time L (en días)", value=30.0, step=1.0, key="fl_L_in") / 365.0
             with col_l2:
                 st.write(f"- **Average Pipeline Inventory (API = D * L):** `{fl_D * fl_L:.2f}` unidades")
                 st.write(f"- **Punto de Reorden en Posición de Inventario (ROP IP = D * L):** `{fl_D * fl_L:.2f}` unidades")
@@ -401,11 +442,11 @@ with tab3:
         elif flash_model == "One-Time Good Deal (Qg*, Ahorro)":
             col_g1, col_g2 = st.columns(2)
             with col_g1:
-                fg_D = st.number_input("Demanda D", value=2000.0, key="fg_D")
-                fg_c = st.number_input("Precio regular c", value=50.0, key="fg_c")
-                fg_cg = st.number_input("Precio oferta cg", value=40.0, key="fg_cg")
-                fg_ct = st.number_input("Costo orden ct", value=500.0, key="fg_ct")
-                fg_h = st.number_input("Tasa h [%]", value=25.0, key="fg_h") / 100.0
+                fg_D = st.number_input("Demanda D", value=2000.0, step=100.0, key="fg_D_in")
+                fg_c = st.number_input("Precio regular c", value=50.0, step=1.0, key="fg_c_in")
+                fg_cg = st.number_input("Precio oferta cg", value=40.0, step=1.0, key="fg_cg_in")
+                fg_ct = st.number_input("Costo orden ct", value=500.0, step=25.0, key="fg_ct_in")
+                fg_h = st.number_input("Tasa h [%]", value=25.0, step=1.0, key="fg_h_in") / 100.0
                 fg_res = eoq.one_time_deal_eoq(fg_D, fg_c, fg_cg, fg_ct, fg_h)
             with col_g2:
                 st.write(f"- **Cantidad Óptima a Comprar (Qg*):** `{fg_res['Q_opt']:,.1f}` unidades")
