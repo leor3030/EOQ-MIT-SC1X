@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 
+# =============================================================================
+# 1. MODELOS CLÁSICOS DE INVENTARIOS (MIT CTL.SC1x)
+# =============================================================================
+
 def basic_eoq(D, c, ct, h):
     ce = c * h
     Q_opt = np.sqrt((2 * ct * D) / ce)
@@ -125,38 +129,28 @@ def planned_backorders_eoq(D, c, ct, h, cs):
     }
 
 # =============================================================================
-# MODELO 1 DE DESCUENTO: ALL-UNITS DISCOUNT (3 ESCALONES)
+# 2. MODELOS DE DESCUENTO (MIT CTL.SC1x)
 # =============================================================================
+
 def all_units_discount_3tiers(D, ct, h, c0, c1, c2, Q1, Q2):
-    """
-    Rango 0: [0, Q1)     -> precio c0
-    Rango 1: [Q1, Q2)    -> precio c1
-    Rango 2: [Q2, inf)   -> precio c2
-    """
     tiers = [
         {"tier": 0, "c": c0, "min_q": 0.0, "max_q": Q1},
         {"tier": 1, "c": c1, "min_q": Q1, "max_q": Q2},
         {"tier": 2, "c": c2, "min_q": Q2, "max_q": np.inf}
     ]
-    
     candidates = []
-    
-    # 1. Evaluar Q* sin restricciones en cada nivel
     for t in tiers:
         ci = t["c"]
         Q_unc = np.sqrt((2 * ct * D) / (ci * h))
         if t["min_q"] <= Q_unc < t["max_q"]:
             tc_val = ci * D + ct * (D / Q_unc) + (ci * h) * (Q_unc / 2.0)
             candidates.append({"Q": Q_unc, "c": ci, "TC": tc_val, "type": f"Q* factible en Tier {t['tier']}"})
-            
-    # 2. Evaluar breakpoints aplicables (Q1 y Q2)
     for bp, ci in [(Q1, c1), (Q2, c2)]:
         tc_bp = ci * D + ct * (D / bp) + (ci * h) * (bp / 2.0)
         candidates.append({"Q": bp, "c": ci, "TC": tc_bp, "type": f"Breakpoint Q={bp}"})
         
     df_cand = pd.DataFrame(candidates).drop_duplicates(subset=["Q"]).sort_values("TC")
     best = df_cand.iloc[0]
-    
     chosen_Q = best["Q"]
     chosen_c = best["c"]
     ce = chosen_c * h
@@ -180,55 +174,32 @@ def all_units_discount_3tiers(D, ct, h, c0, c1, c2, Q1, Q2):
         "Holding_Cost": holding_cost,
         "IOH_max": chosen_Q,
         "IOH_avg": chosen_Q / 2.0,
-        "decision_note": f"Óptimo encontrado en {best['type']} con Q* = {chosen_Q:,.1f} y TC = ${tc:,.2f}",
+        "decision_note": f"Óptimo en {best['type']} con Q* = {chosen_Q:,.1f} y TC = ${tc:,.2f}",
         "candidates": df_cand,
         "b_opt": 0.0,
         "CR": 1.0
     }
 
-# =============================================================================
-# MODELO 2 DE DESCUENTO: INCREMENTAL DISCOUNT (3 ESCALONES)
-# =============================================================================
 def incremental_discount_3tiers(D, ct, h, c0, c1, c2, Q1, Q2):
-    """
-    Fórmulas oficiales MIT CTL.SC1x:
-    F0 = 0
-    Fi = Fi-1 + (c_{i-1} - c_i) * Qi
-    Q*_i = sqrt( 2*D*(ct + Fi) / (h * ci) )
-    ci^e = ci + (Fi / Q*_i)
-    TRC_i = D*ci^e + ct*(D/Q*_i) + (ci*h*Q*_i)/2
-    """
     F0 = 0.0
     F1 = F0 + (c0 - c1) * Q1
     F2 = F1 + (c1 - c2) * Q2
-    
     tiers_info = [
         {"i": 0, "c": c0, "F": F0, "min_q": 0.0, "max_q": Q1},
         {"i": 1, "c": c1, "F": F1, "min_q": Q1, "max_q": Q2},
         {"i": 2, "c": c2, "F": F2, "min_q": Q2, "max_q": np.inf}
     ]
-    
     valid_results = []
-    
     for t in tiers_info:
         ci = t["c"]
         Fi = t["F"]
-        # Q* para el escalón i
         Qi_opt = np.sqrt((2 * D * (ct + Fi)) / (h * ci))
-        
-        # Verificar factibilidad en el intervalo [min_q, max_q)
         is_feasible = (t["min_q"] <= Qi_opt < t["max_q"])
-        
-        # Costo unitario efectivo ci^e
         cei_eff = ci + (Fi / Qi_opt)
-        
-        # Costo total en el lote Qi_opt
         order_cost = ct * (D / Qi_opt)
         holding_cost = (ci * h) * (Qi_opt / 2.0)
         purch_cost = D * cei_eff
         tc_total = purch_cost + order_cost + holding_cost
-        trc_mit = purch_cost + order_cost + holding_cost  # En descuentos MIT, TRC incluye compra
-        
         valid_results.append({
             "Tier": t["i"],
             "Rango": f"[{t['min_q']:.0f} - {t['max_q'] if t['max_q'] != np.inf else 'inf'})",
@@ -239,16 +210,10 @@ def incremental_discount_3tiers(D, ct, h, c0, c1, c2, Q1, Q2):
             "Costo Efectivo ci^e": cei_eff,
             "TC Total ($)": tc_total
         })
-        
     df_eval = pd.DataFrame(valid_results)
     feasible_df = df_eval[df_eval["Factible?"] == True].sort_values("TC Total ($)")
+    best = feasible_df.iloc[0] if not feasible_df.empty else df_eval.sort_values("TC Total ($)").iloc[0]
     
-    if feasible_df.empty:
-        # Fallback a límite más cercano si existiera discontinuidad
-        best = df_eval.sort_values("TC Total ($)").iloc[0]
-    else:
-        best = feasible_df.iloc[0]
-        
     chosen_Q = best["Q*_i"]
     chosen_c = best["Costo Efectivo ci^e"]
     marginal_c = best["Precio (ci)"]
@@ -275,38 +240,21 @@ def incremental_discount_3tiers(D, ct, h, c0, c1, c2, Q1, Q2):
         "IOH_max": chosen_Q,
         "IOH_avg": chosen_Q / 2.0,
         "eval_table": df_eval,
-        "decision_note": f"Escalón óptimo: Tier {best['Tier']} con Q* = {chosen_Q:,.1f} un, ci^e = ${chosen_c:.3f}/un y TC = ${tc:,.2f}",
+        "decision_note": f"Tier {best['Tier']} óptimo con Q* = {chosen_Q:,.1f} un, ci^e = ${chosen_c:.3f}/un y TC = ${tc:,.2f}",
         "b_opt": 0.0,
         "CR": 1.0
     }
 
-# =============================================================================
-# MODELO 3 DE DESCUENTO: ONE-TIME DISCOUNT (GOOD DEAL / ADVANCE BUY)
-# =============================================================================
 def one_time_deal_eoq(D, c, cg, ct, h):
-    """
-    Fórmula oficial MIT SC1x:
-    Q*g = (Q* * c * h + D * (c - cg)) / (h * cg)
-    Savings = TC(normal) - TC_sp
-    """
     ce_base = c * h
     Q_base = np.sqrt((2 * ct * D) / ce_base)
-    
-    # Cantidad especial de compra adelantada Qg*
     Qg_opt = (Q_base * c * h + D * (c - cg)) / (h * cg)
-    
     T_normal = Q_base / D
-    T_special = Qg_opt / D  # Años cubiertos por la compra única
-    
-    # Costo bajo régimen normal durante el tiempo T_special
-    # TC_normal_period = (T_special) * (TC*_base_anual)
+    T_special = Qg_opt / D
     tc_base_anual = c * D + ct * (D / Q_base) + ce_base * (Q_base / 2.0)
     tc_normal_covered = (Qg_opt / D) * tc_base_anual
-    
-    # Costo del pedido especial único
     tc_special = cg * Qg_opt + (h * cg) * (Qg_opt / 2.0) * (Qg_opt / D) + ct
     savings = tc_normal_covered - tc_special
-    
     return {
         "model": "Descuento One-Time (Good Deal)",
         "Q_opt": Qg_opt,
@@ -323,22 +271,17 @@ def one_time_deal_eoq(D, c, cg, ct, h):
         "Savings": savings,
         "IOH_max": Qg_opt,
         "IOH_avg": Qg_opt / 2.0,
-        "decision_note": f"Comprar Qg* = {Qg_opt:,.1f} unidades (cubre {T_special*365:,.1f} días). Ahorro neto estimado: ${savings:,.2f}",
+        "decision_note": f"Comprar Qg* = {Qg_opt:,.1f} unidades (cubre {T_special*365:,.1f} días). Ahorro neto: ${savings:,.2f}",
         "b_opt": 0.0,
         "CR": 1.0
     }
 
 # =============================================================================
-# HERRAMIENTAS DE CÁLCULO MANUAL (PREGUNTAS TÍPICAS EXÁMENES MIT SC1X)
+# 3. CALCULADORA MANUAL (EXÁMENES MIT CTL.SC1x)
 # =============================================================================
 
 def batch_size_rounding(D, ct, ce, batch_size):
-    """
-    Resuelve preguntas como Part 2 (Vendor sells in quantities of X units):
-    Evalúa TRC(Q_abajo) vs TRC(Q_arriba) y elige el mínimo costo relevante.
-    """
     Q_opt = np.sqrt((2 * ct * D) / ce)
-    
     q_low = int(np.floor(Q_opt / batch_size)) * batch_size
     if q_low == 0:
         q_low = batch_size
@@ -356,7 +299,6 @@ def batch_size_rounding(D, ct, ce, batch_size):
         recommended_trc = trc_high
         
     pct_penalty = ((recommended_trc / trc_opt) - 1.0) * 100.0
-    
     return {
         "Q_opt": Q_opt,
         "batch_size": batch_size,
@@ -371,30 +313,19 @@ def batch_size_rounding(D, ct, ce, batch_size):
     }
 
 def power_of_two_calculator(D, ct, ce, weeks_per_year=52):
-    """
-    Resuelve preguntas como Part 3 (Power of Two Rule en semanas):
-    Fórmula oficial MIT: Tpractical = 2 ^ ceil( ln(T_weeks / sqrt(2)) / ln(2) )
-    """
     T_opt_years = np.sqrt((2 * ct) / (D * ce))
     T_opt_weeks = T_opt_years * weeks_per_year
     Q_opt = T_opt_years * D
-    
-    # Fórmula MIT exacta con base logarítmica
     k = int(np.ceil(np.log(T_opt_weeks / np.sqrt(2)) / np.log(2)))
     T_practical_weeks = 2 ** k
-    
-    # Cantidad correspondiente y TRC
     T_practical_years = T_practical_weeks / weeks_per_year
     Q_practical = D * T_practical_years
     
-    # Ratio TRC según fórmula MIT: 0.5 * (T/T* + T*/T)
     ratio_t = T_practical_weeks / T_opt_weeks
     trc_ratio = 0.5 * (ratio_t + (1.0 / ratio_t))
     pct_penalty = (trc_ratio - 1.0) * 100.0
-    
     trc_opt = np.sqrt(2 * ct * ce * D)
     trc_practical = ct * (D / Q_practical) + ce * (Q_practical / 2.0)
-    
     return {
         "T_opt_weeks": T_opt_weeks,
         "T_opt_years": T_opt_years,
@@ -408,10 +339,6 @@ def power_of_two_calculator(D, ct, ce, weeks_per_year=52):
     }
 
 def demand_sensitivity_calculator(DA, DF):
-    """
-    Sensibilidad por pronóstico erróneo de demanda:
-    TRC(Q_F*) / TRC(Q_A*) = 0.5 * ( sqrt(DA/DF) + sqrt(DF/DA) )
-    """
     ratio = 0.5 * (np.sqrt(DA / DF) + np.sqrt(DF / DA))
     pct_penalty = (ratio - 1.0) * 100.0
     return {
